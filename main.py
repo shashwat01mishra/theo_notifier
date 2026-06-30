@@ -93,8 +93,8 @@ def extract_body(payload):
 # ── Gemini Classification ──────────────────────────────────────────────────────
 
 PROMPT_TEMPLATE = """You are a classifier that reads emails and detects hackathons,
-coding competitions, AI challenges, research calls, grant opportunities,
-and application/submission deadlines.
+coding competitions, AI challenges, Kaggle/data-science competitions, research calls,
+grant opportunities, and application/submission deadlines.
 
 Respond ONLY with valid JSON. No explanation, no markdown, no preamble.
 
@@ -102,12 +102,23 @@ Schema:
 {{
   "is_relevant": true or false,
   "confidence": "high" or "medium" or "low",
-  "type": "hackathon" or "competition" or "deadline" or "grant" or "research_call" or "other",
+  "type": "hackathon" or "competition" or "kaggle" or "deadline" or "grant" or "research_call" or "other",
   "name": "<event or opportunity name>",
   "deadline": "<deadline date if found, else null>",
   "link": "<registration or info link if found, else null>",
   "one_liner": "<one sentence summary>"
 }}
+
+Classification guidance:
+- Use type "kaggle" specifically for Kaggle.com competition emails: new competition
+  announcements, "X days left to submit", prize pool / leaderboard deadline reminders,
+  and competition results.
+- Kaggle "leaderboard rank changed" or "someone outranked you" pings with NO deadline
+  urgency and NO new competition info are noise — mark is_relevant=false. Only flag
+  Kaggle emails about a deadline window closing, a new competition launch, or a
+  submission/registration call to action.
+- Use type "competition" for non-Kaggle coding/data competitions (Codeforces, HackerRank, etc).
+- Use type "hackathon" for hackathon-specific events (Devpost, MLH, Unstop hackathon listings).
 
 If not relevant, set is_relevant to false and leave other fields null.
 
@@ -171,7 +182,7 @@ def send_telegram(message):
 
 def format_notification(classification, email):
     emoji_map = {
-        "hackathon": "🏆", "competition": "🥊", "deadline": "⏰",
+        "hackathon": "🏆", "competition": "🥊", "kaggle": "📊", "deadline": "⏰",
         "grant": "💰", "research_call": "🔬", "other": "📌"
     }
     emoji = emoji_map.get(classification.get("type", "other"), "📌")
