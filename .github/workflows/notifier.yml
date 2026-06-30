@@ -2,8 +2,8 @@ name: Hackathon Notifier
 
 on:
   schedule:
-    # Runs every 6 hours — adjust as needed (cron UTC)
-    - cron: "0 */6 * * *"
+    # Runs every 4 hours (cron UTC)
+    - cron: "0 */4 * * *"
   workflow_dispatch:  # also allows manual trigger from GitHub UI
 
 jobs:
