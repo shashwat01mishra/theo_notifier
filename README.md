@@ -1,4 +1,4 @@
-﻿# 🏆 theo_notifier — Hackathon & Deadline Notifier
+# theo_notifier — Hackathon & Deadline Notifier
 
 > Polls Gmail every 6 hours via GitHub Actions, classifies emails with Gemini 2.5 Flash-Lite, and pushes hackathon / scholarship / deadline alerts straight to your Telegram.
 
@@ -173,8 +173,8 @@ They are supplied to GitHub Actions exclusively through **encrypted Secrets**, w
 ### OAuth "Access blocked" — forgot to add myself as a test user
 Google's consent screen defaults to "Testing" mode, which only allows explicitly listed test users. Running `setup_auth.py` without adding my own email first produced a cryptic "Access blocked: this app's request is invalid" error. Fix: *OAuth consent screen → Test users → Add your Gmail*.
 
-### `gemini-2.5-flash-lite-preview-06-17` model was deprecated mid-development
-The model ID I first used disappeared from the API. The fix was switching to the stable `gemini-2.5-flash-lite` alias and adding a fallback list so the classifier degrades gracefully to `gemini-2.5-flash` rather than crashing the whole run.
+### `gemini-2.0-flash` was retired mid-development
+The model I started with was deprecated and returned `limit: 0` quota errors with no obvious explanation. The fix was switching to the current `gemini-2.5-flash-lite` alias and adding a fallback list so the classifier degrades gracefully to `gemini-2.5-flash` rather than crashing the whole run.
 
 ### Binary files cannot be stored directly as GitHub Secrets
 `token.pickle` is a Python pickle binary. GitHub Secrets are text fields. The solution was encoding both credential files to base64 with `base64.b64encode(...).decode()`, storing the string as a Secret, and decoding at runtime in the workflow with `echo "${{ secrets.GMAIL_TOKEN_PICKLE }}" | base64 -d > token.pickle`.
@@ -186,7 +186,21 @@ The model sometimes wraps its response in backtick fences even when the prompt s
 Switching to `parse_mode: MarkdownV2` caused silent 400 errors whenever the email subject contained characters like `.`, `!`, `-`, or `(`. The final design avoids `parse_mode` entirely — plain text with emoji prefixes is readable enough and never causes escaping issues.
 
 ### 503 / UNAVAILABLE storms from Gemini Flash-Lite
-Under heavy load the free-tier model returns HTTP 503. A naive single retry was not enough. The fix: back-off (5s, 10s, 15s), up to 3 attempts per model, before falling back to the more available `gemini-2.5-flash`.
+Under heavy load the free-tier model returns HTTP 503. A naive single retry was not enough. The fix: exponential back-off (5s, 10s, 15s), up to 3 attempts per model, before falling back to the more available `gemini-2.5-flash`.
+
+---
+
+## What's Next
+
+The current system is a stateless classifier — it detects opportunities but knows nothing about you. The planned evolution:
+
+**Phase 1 — Feedback loop (near-term)**
+Telegram inline buttons (Relevant / Irrelevant / Already Seen / Registered) on each notification. Feedback stored locally and used to build a simple preference profile over time.
+
+**Phase 2 — Importance ranking**
+Replace the binary `is_relevant` flag with a float importance score composed of semantic relevance, deadline urgency, historical engagement, and similarity to previously accepted opportunities.
+
+The full vision: a system that learns what opportunities matter to you, what to ignore, and what you are likely to pursue — improving continuously through interaction.
 
 ---
 
