@@ -11,7 +11,7 @@ I kept missing hackathons, scholarship deadlines, and AI-challenge announcements
 This bot fixes that: it reads my unread inbox, asks Gemini whether each email is relevant, and texts me on Telegram within 6 hours — all for free (GitHub Actions free tier + Gemini free tier + Telegram Bot API).
 
 ---
-
+![Telegram notification example](assets/Telegram-demo.png) 
 ## Architecture
 
 ```
