@@ -9,8 +9,10 @@ import base64
 import pickle
 import time
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+
+from dateutil import parser as date_parser
 
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -90,6 +92,42 @@ def extract_body(payload):
     return ""
 
 
+# ── Deadline Parsing ────────────────────────────────────────────────────────────
+
+def parse_deadline_date(raw, reference_now):
+    """
+    Best-effort parse of a freeform deadline string (as extracted by Gemini)
+    into an actual datetime. Returns None if unparseable.
+
+    Handles the common case where the year is omitted (e.g. "March 15") by
+    assuming the current year, then rolling forward a year if that date has
+    already passed by more than 2 days (avoids misreading a genuinely past
+    deadline as "closest").
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+
+    cleaned = raw.strip()
+    if not cleaned or cleaned.lower() in ("null", "none", "n/a", "tbd", "rolling"):
+        return None
+
+    try:
+        dt = date_parser.parse(cleaned, fuzzy=True, default=reference_now)
+    except (ValueError, OverflowError, TypeError):
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    if dt < reference_now - timedelta(days=2):
+        try:
+            dt = dt.replace(year=dt.year + 1)
+        except ValueError:
+            return None
+
+    return dt
+
+
 # ── Gemini Classification ──────────────────────────────────────────────────────
 
 PROMPT_TEMPLATE = """You are a classifier that reads emails and detects hackathons,
@@ -119,6 +157,9 @@ Classification guidance:
   submission/registration call to action.
 - Use type "competition" for non-Kaggle coding/data competitions (Codeforces, HackerRank, etc).
 - Use type "hackathon" for hackathon-specific events (Devpost, MLH, Unstop hackathon listings).
+- Extract "deadline" as a concrete, parseable date if the email states one (e.g. "March 15",
+  "5 July 2026", "next Friday"). If only a vague window is mentioned ("rolling admissions",
+  "ongoing"), leave deadline null.
 
 If not relevant, set is_relevant to false and leave other fields null.
 
@@ -180,7 +221,7 @@ def send_telegram(message):
     resp.raise_for_status()
 
 
-def format_notification(classification, email):
+def format_notification(classification, email, days_remaining=None, is_closest=False):
     emoji_map = {
         "hackathon": "🏆", "competition": "🥊", "kaggle": "📊", "deadline": "⏰",
         "grant": "💰", "research_call": "🔬", "other": "📌"
@@ -193,10 +234,22 @@ def format_notification(classification, email):
         f"{emoji} {classification.get('name', email['subject'])}{conf_tag}",
         f"{classification.get('one_liner', '')}",
     ]
-    if classification.get("deadline"):
-        lines.append(f"⏳ Deadline: {classification['deadline']}")
+
+    raw_deadline = classification.get("deadline")
+    if raw_deadline:
+        if is_closest and days_remaining is not None:
+            day_word = "day" if days_remaining == 1 else "days"
+            lines.append(f"\n🚨 CLOSEST DEADLINE — {days_remaining} {day_word} left!")
+            lines.append(f"⏳ {raw_deadline}")
+        elif days_remaining is not None and 0 <= days_remaining <= 30:
+            day_word = "day" if days_remaining == 1 else "days"
+            lines.append(f"⏳ Deadline: {raw_deadline} ({days_remaining} {day_word} left)")
+        else:
+            lines.append(f"⏳ Deadline: {raw_deadline}")
+
     if classification.get("link"):
         lines.append(f"🔗 {classification['link']}")
+
     lines.append(f"\n📧 From: {email['sender']}")
     return "\n".join(lines)
 
@@ -216,7 +269,8 @@ def save_processed(ids):
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
-    print(f"[{datetime.now(timezone.utc).isoformat()}] Starting notifier run...")
+    now = datetime.now(timezone.utc)
+    print(f"[{now.isoformat()}] Starting notifier run...")
 
     service = get_gmail_service()
     client  = genai.Client(api_key=GEMINI_API_KEY)
@@ -226,6 +280,7 @@ def main():
 
     new_count = 0
     notified  = 0
+    pending   = []  # list of (email, result, days_remaining)
 
     for email in emails:
         if email["id"] in processed:
@@ -245,17 +300,32 @@ def main():
         processed.add(email["id"])
 
         if result.get("is_relevant") and result.get("confidence") in ("high", "medium"):
-            msg = format_notification(result, email)
-            try:
-                send_telegram(msg)
-                notified += 1
-                print(f"  ✅ Notified: {result.get('name', 'unknown')}")
-            except Exception as e:
-                print(f"  ⚠ Telegram send failed: {e}")
+            parsed = parse_deadline_date(result.get("deadline"), now)
+            days_remaining = (parsed.date() - now.date()).days if parsed else None
+            pending.append((email, result, days_remaining))
         else:
             print(f"  — Not relevant, skipping")
 
         time.sleep(5)  # respect 15 RPM free tier limit
+
+    # Find the single closest upcoming deadline among this batch's notifications
+    closest_idx = None
+    closest_days = None
+    for idx, (_, _, days_remaining) in enumerate(pending):
+        if days_remaining is not None and days_remaining >= 0:
+            if closest_days is None or days_remaining < closest_days:
+                closest_days = days_remaining
+                closest_idx = idx
+
+    for idx, (email, result, days_remaining) in enumerate(pending):
+        is_closest = (idx == closest_idx)
+        msg = format_notification(result, email, days_remaining=days_remaining, is_closest=is_closest)
+        try:
+            send_telegram(msg)
+            notified += 1
+            print(f"  ✅ Notified: {result.get('name', 'unknown')}")
+        except Exception as e:
+            print(f"  ⚠ Telegram send failed: {e}")
 
     save_processed(processed)
     print(f"Done. Checked {new_count} new emails, sent {notified} notifications.")
