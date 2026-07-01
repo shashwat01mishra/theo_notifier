@@ -171,9 +171,6 @@ They are supplied to GitHub Actions exclusively through **encrypted Secrets**, w
 
 ## What I Learned / Interesting Bugs
 
-### OAuth "Access blocked" — forgot to add myself as a test user
-Google's consent screen defaults to "Testing" mode, which only allows explicitly listed test users. Running `setup_auth.py` without adding my own email first produced a cryptic "Access blocked: this app's request is invalid" error. Fix: *OAuth consent screen → Test users → Add your Gmail*.
-
 ### `gemini-2.0-flash` was retired mid-development
 The model I started with was deprecated and returned `limit: 0` quota errors with no obvious explanation. The fix was switching to the current `gemini-2.5-flash-lite` alias and adding a fallback list so the classifier degrades gracefully to `gemini-2.5-flash` rather than crashing the whole run.
 
