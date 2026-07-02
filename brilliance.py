@@ -9,13 +9,14 @@ Run standalone: python brilliance.py
 import os
 import json
 import hashlib
+import time
 import requests
 import feedparser
 import yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_BOT_TOKEN = os.environ["BRILLIANCE_BOT_TOKEN"]
 TELEGRAM_CHAT_ID   = os.environ["TELEGRAM_CHAT_ID"]
 
 SEEN_FILE    = Path("brilliance_seen.json")
@@ -82,16 +83,25 @@ def save_seen(seen):
 
 # ── Delivery ───────────────────────────────────────────────────────────────────
 
-def send_telegram(message):
+def send_telegram(message, retries=2):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    resp = requests.post(url, json={
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "disable_web_page_preview": True,  # keep the feed compact
-    })
-    if not resp.ok:
-        print(f"  ⚠ Telegram error {resp.status_code}: {resp.text[:200]}")
-    resp.raise_for_status()
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(url, json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": message,
+                "disable_web_page_preview": True,
+            }, timeout=15)
+            if not resp.ok:
+                print(f"  ⚠ Telegram error {resp.status_code}: {resp.text[:200]}")
+            resp.raise_for_status()
+            return
+        except requests.exceptions.RequestException as e:
+            if attempt < retries:
+                print(f"  ⚠ Send attempt {attempt + 1} failed ({e}), retrying in 2s")
+                time.sleep(2)
+            else:
+                raise
 
 
 def format_item(item):
@@ -136,6 +146,7 @@ def main():
             print(f"  ✅ Sent: {item['title'][:60]}")
         except Exception as e:
             print(f"  ⚠ Send failed: {e}")
+        time.sleep(1.5)  # pace sends — rapid-fire sequential calls get connection-reset
 
     save_seen(seen)
     print("Done.")

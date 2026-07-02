@@ -27,11 +27,11 @@ jobs:
         with:
           path: brilliance_seen.json
           key: brilliance-seen-${{ github.run_id }}
-          restore-keys: |
+          restore-keys: 
             brilliance-seen-
 
       - name: Run brilliance feed
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          BRILLIANCE_BOT_TOKEN: ${{ secrets.BRILLIANCE_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python brilliance.py
