@@ -1,0 +1,42 @@
+# Brilliance feed sources
+# Add a feed: one entry under its type. That's it.
+#
+# type: rss      → any standard RSS/Atom feed
+# type: hn       → Hacker News via Algolia API (special-cased in fetcher)
+
+sources:
+  - name: quanta
+    type: rss
+    url: https://www.quantamagazine.org/feed/
+
+  - name: tao
+    type: rss
+    url: https://terrytao.wordpress.com/feed/
+
+  - name: hackernews
+    type: hn
+    url: https://hn.algolia.com/api/v1/search?tags=front_page
+    min_points: 100
+    max_items: 10
+
+# ── Later adds (uncomment when ready) ──────────────────────────────
+#  - name: aaronson
+#    type: rss
+#    url: https://scottaaronson.blog/?feed=rss2
+#
+#  - name: baez
+#    type: rss
+#    url: https://johncarlosbaez.wordpress.com/feed/
+#
+#  - name: aeon
+#    type: rss
+#    url: https://aeon.co/feed.rss
+#
+#  - name: 3b1b
+#    type: rss
+#    url: https://www.youtube.com/feeds/videos.xml?channel_id=UCYO_jab_esuFRV4b17AJtAw
+#
+#  - name: arxiv_ho
+#    type: rss
+#    url: https://rss.arxiv.org/rss/math.HO
+#    max_items: 15
